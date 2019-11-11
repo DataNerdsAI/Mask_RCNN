@@ -15,9 +15,7 @@ import random
 import numpy as np
 import tensorflow as tf
 import scipy
-import skimage.color
-import skimage.io
-import skimage.transform
+import cv2
 import urllib.request
 import shutil
 import warnings
@@ -25,7 +23,6 @@ from distutils.version import LooseVersion
 
 # URL from which to download the latest COCO trained weights
 COCO_MODEL_URL = "https://github.com/matterport/Mask_RCNN/releases/download/v2.0/mask_rcnn_coco.h5"
-
 
 ############################################################
 #  Bounding Boxes
@@ -356,13 +353,15 @@ class Dataset(object):
         """Load the specified image and return a [H,W,3] Numpy array.
         """
         # Load image
-        image = skimage.io.imread(self.image_info[image_id]['path'])
+        image = cv2.imread(self.image_info[image_id]['path'])      
         # If grayscale. Convert to RGB for consistency.
         if image.ndim != 3:
-            image = skimage.color.gray2rgb(image)
+            image = cv2.cvtColor(image, cv2.COLOR_GRAY2BGR)            
         # If has an alpha channel, remove it for consistency
         if image.shape[-1] == 4:
             image = image[..., :3]
+            
+        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
         return image
 
     def load_mask(self, image_id):
@@ -444,8 +443,7 @@ def resize_image(image, min_dim=None, max_dim=None, min_scale=None, mode="square
 
     # Resize image using bilinear interpolation
     if scale != 1:
-        image = resize(image, (round(h * scale), round(w * scale)),
-                       preserve_range=True)
+        image = resize(image, (round(h * scale), round(w * scale)))
 
     # Need padding or cropping?
     if mode == "square":
@@ -884,25 +882,26 @@ def denorm_boxes(boxes, shape):
     return np.around(np.multiply(boxes, scale) + shift).astype(np.int32)
 
 
-def resize(image, output_shape, order=1, mode='constant', cval=0, clip=True,
-           preserve_range=False, anti_aliasing=False, anti_aliasing_sigma=None):
-    """A wrapper for Scikit-Image resize().
-
-    Scikit-Image generates warnings on every call to resize() if it doesn't
-    receive the right parameters. The right parameters depend on the version
-    of skimage. This solves the problem by using different parameters per
-    version. And it provides a central place to control resizing defaults.
+def resize(image, output_shape, order=2):
+    """A wrapper for cv2 resize().
+       image: image to resize
+       output_shape: destination shape on straight format (height, width)
+       order: interpolation method (1 = cv2.INTER_NEAREST,
+                                    2 = cv2.INTER_LINEAR,
+                                    3 = cv2.INTER_CUBIC)
+                                    
+       Returns:
+           Resized to output_shape image                                                  
     """
-    if LooseVersion(skimage.__version__) >= LooseVersion("0.14"):
-        # New in 0.14: anti_aliasing. Default it to False for backward
-        # compatibility with skimage 0.13.
-        return skimage.transform.resize(
-            image, output_shape,
-            order=order, mode=mode, cval=cval, clip=clip,
-            preserve_range=preserve_range, anti_aliasing=anti_aliasing,
-            anti_aliasing_sigma=anti_aliasing_sigma)
-    else:
-        return skimage.transform.resize(
-            image, output_shape,
-            order=order, mode=mode, cval=cval, clip=clip,
-            preserve_range=preserve_range)
+    # choose interpolation method from cv2
+    # was changed from skimage.transform.resize arguments
+    interpolation = cv2.INTER_LINEAR
+    if order >= 3:
+        interpolation = cv2.INTER_CUBIC
+    elif order < 2:
+        interpolation = cv2.INTER_NEAREST
+        
+    # cv2 expect output image size in (width, height) format
+    output_shape = output_shape[::-1]
+    resized_image = cv2.resize(image, output_shape, interpolation = interpolation)                    
+    return resized_image
