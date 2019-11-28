@@ -98,7 +98,6 @@ def compute_overlaps_masks(masks1, masks2):
     """Computes IoU overlaps between two sets of masks.
     masks1, masks2: [Height, Width, instances]
     """
-    
     # If either set of masks is empty return empty result
     if masks1.shape[-1] == 0 or masks2.shape[-1] == 0:
         return np.zeros((masks1.shape[-1], masks2.shape[-1]))
@@ -527,8 +526,7 @@ def minimize_mask(bbox, mask, mini_shape):
         if m.size == 0:
             raise Exception("Invalid bounding box with area of zero")
         # Resize with bilinear interpolation
-        m = resize(m, mini_shape)
-        mini_mask[:, :, i] = np.around(m).astype(np.bool)
+        mini_mask[:, :, i] = resize(m, mini_shape)
     return mini_mask
 
 
@@ -545,8 +543,7 @@ def expand_mask(bbox, mini_mask, image_shape):
         h = y2 - y1
         w = x2 - x1
         # Resize with bilinear interpolation
-        m = resize(m, (h, w))
-        mask[y1:y2, x1:x2, i] = np.around(m).astype(np.bool)
+        mask[y1:y2, x1:x2, i] = resize(m, (h, w))
     return mask
 
 
@@ -903,5 +900,11 @@ def resize(image, output_shape, order=2):
         
     # cv2 expect output image size in (width, height) format
     output_shape = output_shape[::-1]
-    resized_image = cv2.resize(image, output_shape, interpolation = interpolation)                    
-    return resized_image
+    img_wasnot_bool = True
+    if image.dtype.kind == 'b':
+        # cv2 not working with bool arrays
+        image = image.astype(np.uint8)
+        image_wasnot_bool = False
+    resized_image = cv2.resize(image, output_shape, interpolation = interpolation)
+    return resized_image if img_wasnot_bool \
+                         else np.around(resized_image).astype(np.bool)
